@@ -1,6 +1,7 @@
 import puppeteer from "puppeteer";
 import dotenv from "dotenv";
 import { Client } from "discord.js";
+import { prompts } from "./user.js";
 
 dotenv.config();
 const discordToken = process.env.DISCORD_AUTH_TOKEN;
@@ -9,7 +10,57 @@ const bot = new Client({
   intents: ["Guilds", "GuildMessages", "DirectMessages", "MessageContent"],
 });
 
-const prompts = ["horse painting", "cat"];
+// const prompts = ["lockheed martin sr-72 , northern lights", "cat"];
+
+// puppeteer code
+
+async function waitFewSeconds(time) {
+  return new Promise((resolve) => setTimeout(resolve, time));
+}
+
+async function getButtonCount(btnText, page) {
+  return await page.evaluate((btnText) => {
+    const xpathResult = document.evaluate(
+      `//button//div[text()="${btnText}"]`,
+      document,
+      null,
+      XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+      null
+    );
+    return xpathResult.snapshotLength;
+  }, btnText);
+}
+
+async function waitUntil(condition) {
+  return new Promise((resolve) => {
+    const interval = setInterval(() => {
+      if (condition()) {
+        resolve();
+        clearInterval(interval);
+      }
+    }, 1000);
+  });
+}
+
+async function waitTillButtonCountIncrease(text, page, condition) {
+  return new Promise((resolve) => {
+    const interval = setInterval(async () => {
+      const currentCount = await getButtonCount(text, page);
+      if (condition(currentCount)) {
+        resolve();
+        clearInterval(interval);
+      }
+    }, 1000);
+  });
+}
+
+async function clickLatestButton(btnText, page) {
+  const elements = await page.$x(`//button//div[text()="${btnText}"]`);
+  if (elements.length > 0) {
+    const lastElement = elements[elements.length - 1];
+    await lastElement.click();
+  }
+}
 
 const sendPrompts = async () => {
   const browser = await puppeteer.launch({ headless: false });
@@ -54,6 +105,19 @@ const sendPrompts = async () => {
   const inputDiv =
     "div.textArea-2CLwUE.textAreaSlate-9-y-k2.slateContainer-3x9zil";
 
+  // images
+
+  const imageLinks = [];
+
+  bot.on("messageCreate", (msg) => {
+    if (msg.attachments && msg.attachments.size > 0) {
+      msg.attachments.each((attachment) => {
+        imageLinks.push(attachment.proxyURL);
+        console.log("imageLinks: ", attachment.proxyURL);
+      });
+    }
+  });
+
   for (const prompt of prompts) {
     await page.click(inputDiv);
     await page.keyboard.type("/imagine", { delay: 200 });
@@ -86,6 +150,16 @@ const sendPrompts = async () => {
     console.log("GENERATION COMPLETE");
     // await page.click("button.component-ifCTxY.button-ejjZWC.lookFilled-1H2Jvj.colorRed-2VFhM4.sizeSmall-3R2P2p.grow-2T4nbg");
 
+    await waitFewSeconds(2000);
+    await clickLatestButton("U1", page);
+    await waitFewSeconds(10000);
+    await clickLatestButton("U2", page);
+    await waitFewSeconds(10000);
+    await clickLatestButton("U3", page);
+    await waitFewSeconds(10000);
+    await clickLatestButton("U4", page);
+    await waitFewSeconds(10000);
+
     // Wait for specific bot message
     let waitForNextPrompt = new Promise((resolve, reject) => {
       bot.on("messageCreate", (msg) => {
@@ -96,6 +170,9 @@ const sendPrompts = async () => {
     });
 
     await waitForNextPrompt;
+    console.log("Image links for this prompt: ", imageLinks);
+
+    // imageLinks.length = 0; // Reset the array for the next prompt
 
     console.log("MOVING TO NEXT PROMPT ");
   }
