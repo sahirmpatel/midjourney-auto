@@ -1,10 +1,28 @@
 import puppeteer from "puppeteer";
 import dotenv from "dotenv";
 import { Client } from "discord.js";
-import { prompts } from "./user.js";
+// import { prompts } from "./user.js";
 import startServer from "./server.js";
 dotenv.config();
 const discordToken = process.env.DISCORD_AUTH_TOKEN;
+
+// read from csv
+import fs from "fs";
+import csv from "csv-parser";
+import csvWriter from "csv-writer";
+
+const prompts = [];
+
+fs.createReadStream("user/input.csv")
+  .pipe(csv())
+  .on("data", (row) => {
+    prompts.push(row["prompt"]); // assuming the column name is 'prompt'
+  })
+  .on("end", () => {
+    console.log("CSV file successfully processed");
+    // Call the sendPrompts function here after the CSV file is processed
+    sendPrompts();
+  });
 
 const bot = new Client({
   intents: ["Guilds", "GuildMessages", "DirectMessages", "MessageContent"],
@@ -120,7 +138,7 @@ const sendPrompts = async () => {
     await clickLatestButton("U4", page);
     await waitFewSeconds(10000);
 
-    await new Promise((r) => setTimeout(r, 30000)); // Wait for 1 minute
+    await new Promise((r) => setTimeout(r, 15000)); // Wait for 1 minute
 
     console.log("Image links for this prompt: ", imageArray);
     imageLinks[index + 1] = { prompt: prompt, images: imageArray };
@@ -132,7 +150,33 @@ const sendPrompts = async () => {
   await browser.close();
   console.log("imageLinks:", imageLinks);
 
-  startServer(imageLinks); // Send the JSON object to the server
+  // startServer(imageLinks); // Send the JSON object to the server
+
+  // write to csv
+  let csvData = prompts.map((prompt, index) => {
+    return {
+      prompt: prompt,
+      image1: imageLinks[index + 1].images[0],
+      image2: imageLinks[index + 1].images[1],
+      image3: imageLinks[index + 1].images[2],
+      image4: imageLinks[index + 1].images[3],
+    };
+  });
+
+  const writer = csvWriter.createObjectCsvWriter({
+    path: "user/output.csv",
+    header: [
+      { id: "prompt", title: "PROMPT" },
+      { id: "image1", title: "IMAGE1" },
+      { id: "image2", title: "IMAGE2" },
+      { id: "image3", title: "IMAGE3" },
+      { id: "image4", title: "IMAGE4" },
+    ],
+  });
+
+  writer
+    .writeRecords(csvData)
+    .then(() => console.log("The CSV file was written successfully"));
 };
 
 sendPrompts();
